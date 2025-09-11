@@ -1,33 +1,37 @@
-import { useAuth } from ".../src/context/AuthContext";
-import {useRouter} from "next/router";
-import { useEffect } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function HomePage() {
-  const {user, supabase } = useAuth();
   const router = useRouter();
-  
-  useEffect(()=> {
-    if (user === null) {
-      router.push("/auth");
+  const [user, setUser] = useState(null);
+
+  // 🔒 Protect route
+  useEffect(() => {
+    async function checkUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/auth");
+      } else {
+        setUser(user);
+      }
     }
-  }, [user, router]);
+    checkUser();
+  }, [router]);
 
-  if (user === undefined) {
-    return <p className="p-10">Loading...</p>;
-  }
+  if (!user) return <p>Loading...</p>;
 
-async function handleLogout() {
-  await supabase.auth.signOut();
+  return (
+    <div className="p-6">
+      <h1 className="text-3xl font-bold">Welcome {user.email} 🎶</h1>
+      <p>This is your dashboard.</p>
+    </div>
+  );
 }
-
-return (
-  <div className="p-10">
-    <h1>Welcome, {user.email} </h1>
-    <button
-      onClick={handleLogout}
-      className="bg-blue-500 text-white px-4 mt-4 rounded"
-    >
-      Logout 
-    </button>
-  </div>
-);}

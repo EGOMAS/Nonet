@@ -1,17 +1,40 @@
 import React, { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/router";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+export async function signUp(email, password) {
+  const {data, error} = await supabase.auth.signUp({email, password});
+  if (error) {
+    if (
+      error.message.includes("already registered") ||
+      error.code==="user_already_exists"
+    ) {
+      return {error: "exists"};
+    }
+    return {error: error.message};
+  }
+  return {data};
+}
+
+export async function signIn(email, password) {
+  const {data, error} = await supabase.auth.signInWithPassword({email, password});
+  if (error) {
+    return {data};
+  }
+}
+
 export default function AuthPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("signup"); // start with signup
   const [message, setMessage] = useState("");
-  const [profile, setProfile] = useState(null); // store fetched profile
+  const [profile, setProfile] = useState(null);
 
   async function handleAuth(e) {
     e.preventDefault();
@@ -19,12 +42,20 @@ export default function AuthPage() {
     if (mode === "signup") {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
+        if (
+          error.message.includes("already registered") ||
+          error.code === "user_already_exists"
+        ) {
+          setMessage("Account already exists. Please log in instead.");
+          setMode("login");
+          return;
+        }
         setMessage(error.message);
       } else {
-        setMessage("Thank you for signing up! Check your email for confirmation.");
+        setMessage("Check your email to confirm your account.");
         if (data.user) {
           await supabase.from("profiles").insert({ id: data.user.id });
-          setProfile({ id: data.user.id }); // basic profile right after signup
+          setProfile({ id: data.user.id });
         }
       }
     } else {
@@ -36,11 +67,10 @@ export default function AuthPage() {
         setMessage(error.message);
       } else {
         setMessage("Login successful!");
-
-        // fetch profile right after login
         if (data.user) {
           const userProfile = await getProfile(data.user.id);
           setProfile(userProfile);
+          router.push("/"); // redirect after login
         }
       }
     }
@@ -59,25 +89,24 @@ export default function AuthPage() {
     }
     return data;
   }
-    useEffect(() => {
-      async function loadProfile() {
-        const {data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const profile = await getProfile(user.id);
-            console.log("User Profile", profile);
-          }
+
+  // Redirect logged-in users away from /auth
+  useEffect(() => {
+    async function checkUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        router.push("/"); 
       }
-      loadProfile();
-    }, [])
+    }
+    checkUser();
+  }, [router]);
+
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "2rem" }}>
       <div style={{ maxWidth: "400px", width: "100%" }}>
         <h1>{mode === "signup" ? "Sign Up" : "Login"}</h1>
 
-        <form
-          onSubmit={handleAuth}
-          style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-        >
+        <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <input
             type="email"
             placeholder="Email"
@@ -103,7 +132,7 @@ export default function AuthPage() {
             </>
           ) : (
             <>
-              Don't have an account?{" "}
+              Don’t have an account?{" "}
               <button type="button" onClick={() => setMode("signup")}>
                 Sign up
               </button>
@@ -113,7 +142,6 @@ export default function AuthPage() {
 
         {message && <p style={{ color: "red" }}>{message}</p>}
 
-        {/* If profile is loaded, show it */}
         {profile && (
           <div style={{ marginTop: "2rem", padding: "1rem", border: "1px solid #ccc" }}>
             <h2>Profile</h2>
